@@ -1,3 +1,28 @@
-/backend/node_modules
-/frontend/node_modules
-/.env
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Production build (Frontend - Vite)
+dist/
+dist-ssr/
+
+# Vite cache
+.vite/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Docker & local database data
+mongo-data/
+redis-data/
+
+# Editor & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
