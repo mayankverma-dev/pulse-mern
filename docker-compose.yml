@@ -1,0 +1,115 @@
+services:
+  nginx-proxy:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: ${ECR_REGISTRY:-local}/pulse-mern-web:${IMAGE_TAG:-latest}
+    container_name: nginx-proxy
+    ports:
+      - "80:80"
+    depends_on:
+      api-server:
+        condition: service_healthy
+    networks:
+      - frontend-net
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  api-server:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: ${ECR_REGISTRY:-local}/pulse-mern-api:${IMAGE_TAG:-latest}
+    container_name: api-server
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - MONGO_URI=mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongodb:27017/pulsemDB?authSource=admin
+      - REDIS_URL=redis://redis-cache:6379
+    # Notice: NO 'ports:' mapped to host! Only reachable via frontend-net.
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+    networks:
+      - frontend-net
+      - backend-net
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  mongodb:
+    image: mongo:7.0
+    container_name: mongodb
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_USER}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASSWORD}
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - backend-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+
+  redis-cache:
+    image: redis:7.4-alpine
+    container_name: redis-cache
+    command:
+      [
+        "redis-server",
+        "--appendonly",
+        "yes",
+        "--maxmemory",
+        "128mb",
+        "--maxmemory-policy",
+        "allkeys-lru",
+      ]
+    volumes:
+      - redis-data:/data
+    networks:
+      - backend-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+networks:
+  frontend-net:
+    driver: bridge
+  backend-net:
+    driver: bridge
+    internal: true # Blocks direct external internet access from DB/Cache network
+
+volumes:
+  mongo-data:
+  redis-data:
